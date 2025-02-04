@@ -18,6 +18,14 @@
       changed_when: false
       ignore_errors: yes
 
+    - name: Convert certificate expiration date to human-readable format
+      shell: |
+        echo {{ item.stdout }} | sed 's/notAfter=//'
+      register: cert_expiry_human
+      loop: "{{ cert_expiry.results }}"
+      changed_when: false
+      ignore_errors: yes
+
     - name: Convert certificate expiration date to epoch
       shell: |
         date -d "$(echo {{ item.stdout }} | sed 's/notAfter=//')" +%s
@@ -28,6 +36,6 @@
 
     - name: Check if certificates are expiring soon
       debug:
-        msg: "Certificate {{ item.item.path }} expires on {{ item.stdout | regex_replace('notAfter=', '') }}"
+        msg: "Certificate {{ item.item.path }} expires on {{ cert_expiry_human.results[loop.index0].stdout }}"
       loop: "{{ cert_expiry_epoch.results }}"
       when: "(item.stdout | int) - (ansible_date_time.epoch | int) < (30 * 86400)"
