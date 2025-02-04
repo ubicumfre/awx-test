@@ -1,38 +1,29 @@
 ---
-- name: Check OpenVPN certificates for near expiration
-  hosts: localhost
+- name: Check OpenVPN Certificates Expiration
+  hosts: all
+  become: yes
   gather_facts: no
-  collections:
-    - community.crypto
-  vars:
-    # Define the directory containing certificates
-    cert_dir: /etc/openvpn
-    # Define the expiration threshold (in days)
-    expiration_threshold: 30
 
   tasks:
-    - name: Find all certificate files in the directory
+    - name: Find all certificates in /etc/openvpn
       find:
-        paths: "{{ cert_dir }}"
-        patterns: "*.crt,*.pem"
-        recurse: yes
+        paths: "/etc/openvpn"
+        patterns: "*.crt"
       register: cert_files
 
-    - name: Check each certificate for expiration
-      community.crypto.x509_certificate_info:
-        path: "{{ item.path }}"
+    - name: Get certificate expiration date
+      command: "openssl x509 -enddate -noout -in {{ item.path }}"
+      register: cert_expiry
       loop: "{{ cert_files.files }}"
-      register: cert_info
-      ignore_errors: yes  # Continue even if some certificates are invalid
+      changed_when: false
+      ignore_errors: yes
 
-    - name: Display certificates near expiration
+    - name: Extract and format expiration date
+      set_fact:
+        cert_expiry_dates: "{{ cert_expiry.results | map(attribute='stdout') | list }}"
+
+    - name: Check if certificates are expiring soon
       debug:
-        msg: |
-          Certificate: {{ item.item.path }}
-          Expiration Date: {{ item.not_after }}
-          Days Remaining: {{ ((item.not_after | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days }}
-          Status: {{ 'Expired' if ((item.not_after | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days < 0 else 'Near Expiration' if ((item.not_after | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days <= expiration_threshold else 'Valid' }}
-      loop: "{{ cert_info.results }}"
-      when: item is not skipped
-      loop_control:
-        label: "{{ item.item.path }}"
+        msg: "Certificate {{ item.item.path }} expires on {{ item.stdout | regex_replace('notAfter=', '') }}"
+      loop: "{{ cert_expiry.results }}"
+      when: "(item.stdout | regex_replace('notAfter=', '') | strftime('%s') | int) - (ansible_date_time.epoch | int) < (30 * 86400)"
