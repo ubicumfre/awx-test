@@ -2,7 +2,7 @@
 - name: Check OpenVPN Certificates Expiration
   hosts: all
   become: yes
-  gather_facts: no
+  gather_facts: yes
 
   tasks:
     - name: Find all certificates in /etc/openvpn
@@ -18,12 +18,16 @@
       changed_when: false
       ignore_errors: yes
 
-    - name: Extract and format expiration date
-      set_fact:
-        cert_expiry_dates: "{{ cert_expiry.results | map(attribute='stdout') | list }}"
+    - name: Convert certificate expiration date to epoch
+      shell: |
+        date -d "$(echo {{ item.stdout }} | sed 's/notAfter=//')" +%s
+      register: cert_expiry_epoch
+      loop: "{{ cert_expiry.results }}"
+      changed_when: false
+      ignore_errors: yes
 
     - name: Check if certificates are expiring soon
       debug:
         msg: "Certificate {{ item.item.path }} expires on {{ item.stdout | regex_replace('notAfter=', '') }}"
-      loop: "{{ cert_expiry.results }}"
-      when: "(item.stdout | regex_replace('notAfter=', '') | strftime('%s') | int) - (ansible_date_time.epoch | int) < (30 * 86400)"
+      loop: "{{ cert_expiry_epoch.results }}"
+      when: "(item.stdout | int) - (ansible_date_time.epoch | int) < (30 * 86400)"
