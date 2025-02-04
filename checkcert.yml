@@ -3,9 +3,9 @@
   gather_facts: false
 
   tasks:
-    - name: Find cert files under /etc/pki/tls/certs
+    - name: Find cert files under /etc/openvpn
       find:
-        paths: /etc/pki/tls/certs
+        paths: /etc/openvpn
         file_type: file
         patterns: "*.crt"
         recurse: yes
