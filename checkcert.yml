@@ -1,6 +1,8 @@
 - name: find cerfication files & expiration dates
   hosts: my_host
   gather_facts: false
+  collections:
+    - community.crypto
 
   tasks:
     - name: Find cert files under /etc/openvpn
