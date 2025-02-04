@@ -1,43 +1,38 @@
-- name: find cerfication files & expiration dates
-  hosts: my_host
-  gather_facts: false
+---
+- name: Check OpenVPN certificates for near expiration
+  hosts: localhost
+  gather_facts: no
   collections:
     - community.crypto
+  vars:
+    # Define the directory containing certificates
+    cert_dir: /etc/openvpn
+    # Define the expiration threshold (in days)
+    expiration_threshold: 30
 
   tasks:
-    - name: Find cert files under /etc/openvpn
+    - name: Find all certificate files in the directory
       find:
-        paths: /etc/openvpn
-        file_type: file
-        patterns: "*.crt"
+        paths: "{{ cert_dir }}"
+        patterns: "*.crt,*.pem"
         recurse: yes
-        excludes: "localhost.crt"
-      register: find_result
+      register: cert_files
 
-    - name: Check validity
+    - name: Check each certificate for expiration
       community.crypto.x509_certificate_info:
         path: "{{ item.path }}"
-        valid_at:
-          point_1: "+1w"
-          point_2: "+10w"
+      loop: "{{ cert_files.files }}"
       register: cert_info
-      loop: "{{ find_result.files }}"
+      ignore_errors: yes  # Continue even if some certificates are invalid
 
-    - name: Filter out valid certs
-      set_fact:
-        outdated_certs: "{{ cert_info | json_query('results[? !(valid_at.point_1) || !(valid_at.point_2)]') }}"
-
-    - block:
-        - name: Check that all certificates are valid
-          assert:
-            that:
-              - outdated_certs | count == 0
-      
-      rescue:
-        - name: Show info about outdated certs
-          debug:
-            msg: >-
-              {{ { "Outdated Certs": outdated_certs | json_query("[].item.path") } }}
-        
-        - fail:
-            msg: "Outdated certs found. See list above"
+    - name: Display certificates near expiration
+      debug:
+        msg: |
+          Certificate: {{ item.item.path }}
+          Expiration Date: {{ item.not_after }}
+          Days Remaining: {{ ((item.not_after | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days }}
+          Status: {{ 'Expired' if ((item.not_after | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days < 0 else 'Near Expiration' if ((item.not_after | to_datetime) - (ansible_date_time.iso8601 | to_datetime)).days <= expiration_threshold else 'Valid' }}
+      loop: "{{ cert_info.results }}"
+      when: item is not skipped
+      loop_control:
+        label: "{{ item.item.path }}"
