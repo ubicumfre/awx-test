@@ -2,9 +2,6 @@
   hosts: my_host
   gather_facts: false
 
-  collections:
-    - name: community.crypto.x509_certificate_info
-
   tasks:
     - name: Find cert files under /etc/openvpn
       find:
