@@ -1,8 +1,0 @@
-- name: Retrieve renewal information for a certificate
-  community.crypto.acme_certificate_renewal_info:
-    certificate_path: /etc/openvpn/ca.crt
-  register: cert_data
-
-- name: Should the certificate be renewed?
-  ansible.builtin.debug:
-    var: cert_data.should_renew
