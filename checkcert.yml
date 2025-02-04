@@ -1,3 +1,8 @@
+- collections:
+    - name: community.crypto.x509_certificate_info
+
+
+
 - name: find cerfication files & expiration dates
   hosts: my_host
   gather_facts: false
@@ -13,7 +18,7 @@
       register: find_result
 
     - name: Check validity
-      openssl_certificate_info:
+      community.crypto.x509_certificate_info:
         path: "{{ item.path }}"
         valid_at:
           point_1: "+1w"
