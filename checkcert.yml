@@ -1,41 +1,65 @@
 ---
-- name: Check OpenVPN Certificates Expiration
+- name: Check OpenVPN certificates for near expiration
   hosts: all
   become: yes
-  gather_facts: yes
-
+  vars:
+    cert_dir: "/etc/openvpn"
+    expiration_threshold_days: 30  # Number of days to check for expiration
   tasks:
-    - name: Find all certificates in /etc/openvpn
+    - name: Find all certificate files in the OpenVPN directory
       find:
-        paths: "/etc/openvpn"
+        paths: "{{ cert_dir }}"
         patterns: "*.crt"
       register: cert_files
 
-    - name: Get certificate expiration date
-      command: "openssl x509 -enddate -noout -in {{ item.path }}"
-      register: cert_expiry
+    - name: Check expiration date for each certificate
+      shell: |
+        openssl x509 -enddate -noout -in "{{ item.path }}" | cut -d= -f2
       loop: "{{ cert_files.files }}"
+      register: cert_expiration_dates
       changed_when: false
-      ignore_errors: yes
 
-    - name: Convert certificate expiration date to human-readable format
-      shell: |
-        echo {{ item.stdout }} | sed 's/notAfter=//'
-      register: cert_expiry_human
-      loop: "{{ cert_expiry.results }}"
+    - name: Convert expiration dates to timestamps
+      set_fact:
+        cert_expiration_timestamps: >-
+          {{
+            cert_expiration_timestamps | default([]) +
+            [{
+              'path': item.item.path,
+              'expiration_date': item.stdout,
+              'expiration_timestamp': (item.stdout | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
+            }]
+          }}
+      loop: "{{ cert_expiration_dates.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+
+    - name: Get current timestamp
+      set_fact:
+        current_timestamp: "{{ '%Y-%m-%d %H:%M:%S' | strftime }}"
       changed_when: false
-      ignore_errors: yes
 
-    - name: Convert certificate expiration date to epoch
-      shell: |
-        date -d "$(echo {{ item.stdout }} | sed 's/notAfter=//')" +%s
-      register: cert_expiry_epoch
-      loop: "{{ cert_expiry.results }}"
-      changed_when: false
-      ignore_errors: yes
+    - name: Calculate time difference for each certificate
+      set_fact:
+        cert_expiration_info: >-
+          {{
+            cert_expiration_info | default([]) +
+            [{
+              'path': item.path,
+              'expiration_date': item.expiration_date,
+              'days_until_expiration': ((item.expiration_timestamp - (current_timestamp | to_datetime('%Y-%m-%d %H:%M:%S')).timestamp()) / 86400) | int
+            }]
+          }}
+      loop: "{{ cert_expiration_timestamps }}"
+      loop_control:
+        label: "{{ item.path }}"
 
-    - name: Check if certificates are expiring soon
+    - name: Output certificates nearing expiration
       debug:
-        msg: "Certificate {{ item.item.path }} expires on {{ cert_expiry_human.results[loop.index0].stdout }}"
-      loop: "{{ cert_expiry_epoch.results }}"
-      when: "(item.stdout | int) - (ansible_date_time.epoch | int) < (30 * 86400)"
+        msg: >-
+          Certificate '{{ item.path }}' expires on {{ item.expiration_date }}
+          (in {{ item.days_until_expiration }} days).
+      loop: "{{ cert_expiration_info }}"
+      when: item.days_until_expiration <= expiration_threshold_days
+      loop_control:
+        label: "{{ item.path }}"
