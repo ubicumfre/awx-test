@@ -14,7 +14,7 @@
 
     - name: Check expiration date for each certificate
       shell: |
-        openssl x509 -enddate -noout -in "{{ item.path }}" | cut -d= -f2
+        sudo openssl x509 -enddate -noout -in "{{ item.path }}" | cut -d= -f2
       loop: "{{ cert_files.files }}"
       register: cert_expiration_dates
       changed_when: false
