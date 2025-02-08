@@ -22,29 +22,42 @@
       when: cert_files.matched > 0
       become: yes
       become_user: root
-
+      
     - name: Check expiration date for each certificate
       shell: "openssl x509 -enddate -noout -in '{{ item.path }}' | cut -d= -f2"
       loop: "{{ cert_files.files }}"
       register: cert_expiration_dates
       changed_when: false
 
+    - name: Debug cert expiration check output
+      debug:
+        var: cert_expiration_dates
+
     - name: Convert expiration dates to timestamps
       set_fact:
         cert_expiration_info: >-
           {{
-            cert_files.files | zip(cert_expiration_dates.results) | map('list') | map('first') | map('combine', {'expiration_date': item.1.stdout | trim}) | map('combine', {'expiration_timestamp': (item.expiration_date | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp() }) | list
+            cert_expiration_info | default([]) +
+            [{
+              'path': item.0.path,
+              'expiration_date': item.1.stdout | trim,
+              'expiration_timestamp': (item.1.stdout | trim | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
+            }]
           }}
+      loop: "{{ cert_files.files | zip(cert_expiration_dates.results) | list }}"
+      when: item.1.stdout is defined and item.1.stdout | length > 0
 
     - name: Get current timestamp
       set_fact:
-        current_timestamp: "{{ ansible_date_time.epoch }}"
+        current_timestamp: "{{ ansible_date_time.epoch | int }}"
 
     - name: Calculate days until expiration
       set_fact:
         cert_expiration_info: >-
           {{
-            cert_expiration_info | map('combine', {'days_until_expiration': ((item.expiration_timestamp - current_timestamp) / 86400) | int }) | list
+            cert_expiration_info | map('combine', {
+              'days_until_expiration': ((item.expiration_timestamp | int - current_timestamp | int) / 86400) | int
+            }) | list
           }}
 
     - name: Output certificates nearing expiration
