@@ -17,6 +17,7 @@
         path: "{{ item.path }}"
         owner: "ubicum"
         group: "ubicum"
+        force: yes
       loop: "{{ cert_files.files }}"
       when: cert_files.matched > 0
       become: yes
