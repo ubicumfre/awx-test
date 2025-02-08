@@ -26,8 +26,8 @@
             cert_expiration_timestamps | default([]) +
             [{
               'path': item.item.path,
-              'expiration_date': item.stdout,
-              'expiration_timestamp': (item.stdout | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
+              'expiration_date': item.stdout | regex_replace('^notAfter=', ''),
+              'expiration_timestamp': (item.stdout | regex_replace('^notAfter=', '') | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
             }]
           }}
       loop: "{{ cert_expiration_dates.results }}"
