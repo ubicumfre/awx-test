@@ -4,7 +4,7 @@
   become: yes
   vars:
     cert_dir: "/etc/openvpn"
-    expiration_threshold_days: 30  # Number of days to check for expiration
+    expiration_threshold_days: 30
   tasks:
     - name: Find all certificate files in the OpenVPN directory
       find:
