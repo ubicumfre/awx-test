@@ -14,24 +14,23 @@
 
     - name: Check expiration date for each certificate
       shell: |
-        openssl x509 -enddate -noout -in "{{ item.path }}" 2>/dev/null || echo "INVALID"
+        openssl x509 -enddate -noout -in "{{ item.path }}" | cut -d= -f2
       loop: "{{ cert_files.files }}"
       register: cert_expiration_dates
       changed_when: false
 
-    - name: Convert expiration dates to timestamps (only for valid certificates)
+    - name: Convert expiration dates to timestamps
       set_fact:
         cert_expiration_timestamps: >-
           {{
             cert_expiration_timestamps | default([]) +
             [{
               'path': item.item.path,
-              'expiration_date': item.stdout | regex_replace('^notAfter=', ''),
-              'expiration_timestamp': (item.stdout | regex_replace('^notAfter=', '') | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
+              'expiration_date': item.stdout,
+              'expiration_timestamp': (item.stdout | to_datetime('%b %d %H:%M:%S %Y %Z')).timestamp()
             }]
           }}
       loop: "{{ cert_expiration_dates.results }}"
-      when: item.stdout != "INVALID" and item.stdout != ""
       loop_control:
         label: "{{ item.item.path }}"
 
@@ -64,12 +63,3 @@
       when: item.days_until_expiration <= expiration_threshold_days
       loop_control:
         label: "{{ item.path }}"
-
-    - name: Output invalid or non-certificate files
-      debug:
-        msg: >-
-          File '{{ item.item.path }}' is not a valid certificate or has no expiration date.
-      loop: "{{ cert_expiration_dates.results }}"
-      when: item.stdout == "INVALID" or item.stdout == ""
-      loop_control:
-        label: "{{ item.item.path }}"
