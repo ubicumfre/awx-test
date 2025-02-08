@@ -1,7 +1,7 @@
 ---
 - name: Check OpenVPN certificates for near expiration
   hosts: all
-  become: yes
+  become: yes  # Use privilege escalation
   vars:
     cert_dir: "/etc/openvpn"
     expiration_threshold_days: 30
@@ -14,9 +14,10 @@
 
     - name: Check expiration date for each certificate
       shell: |
-        sudo openssl x509 -enddate -noout -in "{{ item.path }}" | cut -d= -f2
+        openssl x509 -enddate -noout -in "{{ item.path }}" | cut -d= -f2
       loop: "{{ cert_files.files }}"
       register: cert_expiration_dates
+      become: yes  # Escalate privileges for this task
       changed_when: false
 
     - name: Convert expiration dates to timestamps
