@@ -21,6 +21,7 @@
       loop: "{{ cert_files.files }}"
       when: cert_files.matched > 0
       become: yes
+      become_user: root
 
     - name: Check expiration date for each certificate
       shell: "openssl x509 -enddate -noout -in '{{ item.path }}' | cut -d= -f2"
