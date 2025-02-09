@@ -22,7 +22,7 @@
       when: cert_files.matched > 0
       become: yes
       become_user: root
-      
+
     - name: Check expiration date for each certificate
       shell: "openssl x509 -enddate -noout -in '{{ item.path }}' | cut -d= -f2"
       loop: "{{ cert_files.files }}"
@@ -45,7 +45,13 @@
             }]
           }}
       loop: "{{ cert_files.files | zip(cert_expiration_dates.results) | list }}"
-      when: item.1.stdout is defined and item.1.stdout | length > 0
+      when: 
+        - item.1.stdout is defined 
+        - item.1.stdout | length > 0
+
+    - name: Debug cert_expiration_info before calculating days
+      debug:
+        var: cert_expiration_info
 
     - name: Get current timestamp
       set_fact:
@@ -55,10 +61,12 @@
       set_fact:
         cert_expiration_info: >-
           {{
-            cert_expiration_info | map('combine', {
+            cert_expiration_info | default([]) | map('combine', {
               'days_until_expiration': ((item.expiration_timestamp | int - current_timestamp | int) / 86400) | int
             }) | list
           }}
+      loop: "{{ cert_expiration_info | default([]) }}"
+      when: cert_expiration_info is defined and cert_expiration_info | length > 0
 
     - name: Output certificates nearing expiration
       debug:
